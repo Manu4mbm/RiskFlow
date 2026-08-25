@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: riskflow
+    runtime: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn riskflow.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"

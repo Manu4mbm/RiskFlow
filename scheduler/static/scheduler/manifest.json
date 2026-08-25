@@ -1,0 +1,24 @@
+{
+    "name": "RiskFlow — Risk-Adjusted Scheduler",
+    "short_name": "RiskFlow",
+    "description": "Monte Carlo schedule and cost risk analysis for construction plans.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#EEF1F4",
+    "theme_color": "#1F6091",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "/static/scheduler/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/static/scheduler/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}
