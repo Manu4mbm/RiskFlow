@@ -112,6 +112,7 @@
         scurveCanvas: document.getElementById('scurve-canvas'),
         scurveEmpty: document.getElementById('scurve-empty'),
 
+        btnNewProject: document.getElementById('btn-new-project'),
         btnRenameProject: document.getElementById('btn-rename-project'),
         btnLoadSample: document.getElementById('btn-load-sample'),
         btnExport: document.getElementById('btn-export'),
@@ -849,6 +850,22 @@
         showToast('Sample project loaded');
     }
 
+    function newProject() {
+        if (state.project.tasks.length > 0 &&
+            !window.confirm('Start a new project? Unsaved changes to the current one will be lost unless exported first.')) {
+            return;
+        }
+        var name = window.prompt('New project name', 'Untitled Project');
+        if (name === null) return;
+        name = name.trim() || 'Untitled Project';
+        state.project = emptyProject();
+        state.project.name = name;
+        state.result = null;
+        saveProject();
+        renderAll();
+        showToast('New project created');
+    }
+
     function renameProject() {
         var name = window.prompt('Project name', state.project.name || 'Untitled Project');
         if (name === null) return;
@@ -910,6 +927,7 @@
         showToast('Project cleared');
     }
 
+    el.btnNewProject.addEventListener('click', newProject);
     el.btnRenameProject.addEventListener('click', renameProject);
     el.btnLoadSample.addEventListener('click', loadSample);
     el.btnExport.addEventListener('click', exportProject);
