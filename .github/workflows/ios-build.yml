@@ -1,0 +1,57 @@
+name: iOS build check
+
+# Sanity-checks that the static export + Capacitor sync + native project still
+# build together, on every push that touches the web app or the mobile shell.
+# This does NOT produce a signed .ipa or upload to App Store Connect -- that
+# needs a distribution certificate + provisioning profile (or an App Store
+# Connect API key) added as repo secrets first. Once those exist, replace the
+# final build step below with `xcodebuild archive` + `xcodebuild -exportArchive`
+# (or fastlane) to fully automate TestFlight/App Store uploads.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scheduler/**'
+      - 'mobile/**'
+      - 'scripts/export_static.py'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Django deps
+        run: pip install -r requirements.txt
+
+      - name: Export static bundle (mobile/www)
+        run: python scripts/export_static.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install mobile deps
+        working-directory: mobile
+        run: npm install
+
+      - name: Add iOS platform if not already committed
+        working-directory: mobile
+        run: test -d ios || npx cap add ios
+
+      - name: Sync web bundle into the native project
+        working-directory: mobile
+        run: npx cap sync ios
+
+      - name: Build (unsigned, simulator SDK) as a sanity check
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -sdk iphonesimulator -configuration Debug build \
+            CODE_SIGNING_ALLOWED=NO

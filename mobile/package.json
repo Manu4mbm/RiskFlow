@@ -1,0 +1,23 @@
+{
+  "name": "riskflow-mobile",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "sync": "cap sync ios",
+    "assets": "capacitor-assets generate --ios",
+    "open": "cap open ios"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Capacitor iOS shell for RiskFlow",
+  "private": "true",
+  "dependencies": {
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.6.8"
+  }
+}

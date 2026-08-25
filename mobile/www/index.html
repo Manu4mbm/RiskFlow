@@ -1,0 +1,283 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    <title>RiskFlow — Risk-Adjusted Scheduler</title>
+    <meta name="description" content="Monte Carlo schedule and cost risk analysis for construction plans, styled after Primavera P6.">
+
+    <!-- PWA -->
+    <meta name="theme-color" content="#1F6091">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="RiskFlow">
+    <link rel="manifest" href="/static/scheduler/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/scheduler/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/scheduler/icons/favicon-16.png">
+    <link rel="apple-touch-icon" href="/static/scheduler/icons/apple-touch-icon.png">
+
+    <!-- Type: SF Pro (system) for UI text, SF Mono / IBM Plex Mono for numerics -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/scheduler/css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <header class="app-header">
+            <span class="app-title">RiskFlow<span class="app-title-sub" id="project-name-label">Risk-Adjusted Scheduler</span></span>
+            <button class="btn btn-icon" id="btn-theme" type="button" title="Toggle theme">◐</button>
+        </header>
+
+        <!-- ACTIVITIES -->
+        <section class="view active" id="view-activities" data-view="activities">
+            <div class="split-landscape">
+                <div class="split-pane" id="activities-pane">
+                    <div class="section-toolbar">
+                        <span class="section-title">Activity Table</span>
+                        <button class="btn btn-primary btn-sm" id="btn-add-activity" type="button">+ Add</button>
+                    </div>
+                    <div class="activity-table-head">
+                        <span></span>
+                        <span>Activity</span>
+                        <span style="text-align:right">Duration</span>
+                        <span style="text-align:right">Cost</span>
+                        <span></span>
+                    </div>
+                    <div class="activity-table" id="activity-list"></div>
+                    <div class="empty-state hidden" id="activities-empty">
+                        <div class="empty-state-icon">🏗️</div>
+                        <div class="empty-state-title">No activities yet</div>
+                        <div class="empty-state-body">Add your first activity, or load the sample construction project to explore the app.</div>
+                        <div class="empty-state-actions">
+                            <button class="btn btn-primary" id="btn-empty-add" type="button">+ Add Activity</button>
+                            <button class="btn" id="btn-empty-sample" type="button">Load Sample</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="split-divider"></div>
+                <div class="split-pane hidden" id="mini-gantt-pane">
+                    <div class="section-toolbar">
+                        <span class="section-title">Gantt Preview</span>
+                    </div>
+                    <div class="chart-scroll" id="mini-gantt-scroll">
+                        <canvas id="mini-gantt-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RUN -->
+        <section class="view" id="view-run" data-view="run">
+            <div class="run-section">
+                <div class="run-section-title">Simulation Settings</div>
+                <div class="field">
+                    <span class="field-label">Iterations</span>
+                    <div class="segmented" id="iterations-select">
+                        <button data-value="1000" type="button">1,000</button>
+                        <button data-value="5000" class="active" type="button">5,000</button>
+                        <button data-value="10000" type="button">10,000</button>
+                        <button data-value="25000" type="button">25,000</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="field-label">Distribution</span>
+                    <div class="segmented" id="distribution-select">
+                        <button data-value="pert" class="active" type="button">PERT-β</button>
+                        <button data-value="triangular" type="button">Triangular</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="field-label">Gantt Confidence</span>
+                    <div class="segmented" id="confidence-select">
+                        <button data-value="p50" type="button">P50</button>
+                        <button data-value="p80" class="active" type="button">P80</button>
+                        <button data-value="p90" type="button">P90</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="field-label">Currency</span>
+                    <input class="field-input" id="currency-input" type="text" maxlength="8" value="INR">
+                    <div class="field-hint">Formatted en-IN with L / Cr abbreviations.</div>
+                </div>
+                <button class="run-button" id="btn-run" type="button">
+                    <span class="run-progress-fill" id="run-progress-fill"></span>
+                    <span class="run-button-label" id="run-button-label">Run Simulation</span>
+                </button>
+                <div class="run-status hidden" id="run-status"></div>
+            </div>
+
+            <div class="run-section" id="results-schedule">
+                <div class="run-section-title">Schedule (days)</div>
+                <div class="kpi-grid">
+                    <div class="kpi-card"><span class="kpi-label">Deterministic</span><span class="kpi-value" id="kpi-sched-det">—</span></div>
+                    <div class="kpi-card"><span class="kpi-label">P50</span><span class="kpi-value" id="kpi-sched-p50">—</span></div>
+                    <div class="kpi-card kpi-p80"><span class="kpi-label">P80</span><span class="kpi-value" id="kpi-sched-p80">—</span></div>
+                    <div class="kpi-card"><span class="kpi-label">P90</span><span class="kpi-value" id="kpi-sched-p90">—</span></div>
+                </div>
+                <div class="contingency-line">
+                    <span>Schedule contingency (P80)</span>
+                    <span class="contingency-value" id="contingency-schedule">—</span>
+                </div>
+            </div>
+
+            <div class="run-section" id="results-cost">
+                <div class="run-section-title">Cost</div>
+                <div class="kpi-grid">
+                    <div class="kpi-card"><span class="kpi-label">Deterministic</span><span class="kpi-value" id="kpi-cost-det">—</span></div>
+                    <div class="kpi-card"><span class="kpi-label">P50</span><span class="kpi-value" id="kpi-cost-p50">—</span></div>
+                    <div class="kpi-card kpi-p80"><span class="kpi-label">P80</span><span class="kpi-value" id="kpi-cost-p80">—</span></div>
+                    <div class="kpi-card"><span class="kpi-label">P90</span><span class="kpi-value" id="kpi-cost-p90">—</span></div>
+                </div>
+                <div class="contingency-line">
+                    <span>Cost contingency (P80)</span>
+                    <span class="contingency-value" id="contingency-cost">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- GANTT -->
+        <section class="view" id="view-gantt" data-view="gantt">
+            <div class="chart-toolbar">
+                <span class="section-title">Risk-Adjusted Gantt</span>
+                <div class="segmented" id="gantt-confidence-toggle" style="width:auto">
+                    <button data-value="p50" type="button">P50</button>
+                    <button data-value="p80" class="active" type="button">P80</button>
+                    <button data-value="p90" type="button">P90</button>
+                </div>
+            </div>
+            <div class="gantt-legend">
+                <span><span class="legend-swatch sw-critical"></span>Critical path</span>
+                <span><span class="legend-swatch sw-normal"></span>Non-critical</span>
+                <span><span class="legend-swatch sw-band"></span>Contingency band</span>
+            </div>
+            <div class="chart-scroll" id="gantt-scroll">
+                <canvas id="gantt-canvas"></canvas>
+            </div>
+            <div class="chart-empty" id="gantt-empty">Run a simulation to see the risk-adjusted Gantt.</div>
+        </section>
+
+        <!-- S-CURVE -->
+        <section class="view" id="view-scurve" data-view="scurve">
+            <div class="chart-toolbar">
+                <span class="section-title">Cumulative Confidence</span>
+                <div class="segmented" id="scurve-metric-toggle" style="width:auto">
+                    <button data-value="schedule" class="active" type="button">Schedule</button>
+                    <button data-value="cost" type="button">Cost</button>
+                </div>
+            </div>
+            <div class="chart-scroll" id="scurve-scroll" style="overflow:hidden">
+                <canvas id="scurve-canvas"></canvas>
+            </div>
+            <div class="chart-empty" id="scurve-empty">Run a simulation to see the S-curve.</div>
+        </section>
+
+        <!-- PROJECT -->
+        <section class="view" id="view-project" data-view="project">
+            <div class="section-toolbar"><span class="section-title">Project Data</span></div>
+            <div class="project-list">
+                <div class="project-row">
+                    <div>
+                        <div class="project-row-label">Project name</div>
+                        <div class="project-row-sub" id="project-name-sub">Untitled Project</div>
+                    </div>
+                    <button class="btn btn-sm" id="btn-rename-project" type="button">Rename</button>
+                </div>
+                <div class="project-row">
+                    <div>
+                        <div class="project-row-label">Load sample project</div>
+                        <div class="project-row-sub">8-activity construction example</div>
+                    </div>
+                    <button class="btn btn-sm" id="btn-load-sample" type="button">Load</button>
+                </div>
+                <div class="project-row">
+                    <div>
+                        <div class="project-row-label">Export JSON</div>
+                        <div class="project-row-sub">Share sheet / download</div>
+                    </div>
+                    <button class="btn btn-sm" id="btn-export" type="button">Export</button>
+                </div>
+                <div class="project-row">
+                    <div>
+                        <div class="project-row-label">Import JSON</div>
+                        <div class="project-row-sub">Open a previously exported file</div>
+                    </div>
+                    <button class="btn btn-sm" id="btn-import" type="button">Import</button>
+                    <input type="file" id="import-file" accept="application/json,.json">
+                </div>
+                <div class="project-row">
+                    <div>
+                        <div class="project-row-label">Clear project</div>
+                        <div class="project-row-sub">Removes all activities</div>
+                    </div>
+                    <button class="btn btn-sm btn-danger" id="btn-clear" type="button">Clear</button>
+                </div>
+            </div>
+
+            <div class="about-block">
+                <h3>How it works</h3>
+                <p>Each activity gets a three-point estimate (optimistic / most likely / pessimistic) for duration and cost. Running the simulation samples every activity thousands of times, walks the dependency network forward each time (Critical Path Method), and records the project finish date and total cost for each trial. Sorting those trials gives P50 / P80 / P90 confidence levels — the schedule and cost contingency needed to be that confident.</p>
+                <h3>MVP limits</h3>
+                <p>Activities are sampled independently — there is no correlation modelling between them, so contingency here can understate real-world risk where delays or overruns tend to move together. Resource levelling, working-day calendars, and baselines/actuals tracking are not modelled in this version.</p>
+            </div>
+        </section>
+
+        <nav class="tab-bar">
+            <button class="tab-btn active" data-tab="activities" type="button"><span class="tab-icon">📋</span>Activities</button>
+            <button class="tab-btn" data-tab="run" type="button"><span class="tab-icon">▶</span>Run</button>
+            <button class="tab-btn" data-tab="gantt" type="button"><span class="tab-icon">📊</span>Gantt</button>
+            <button class="tab-btn" data-tab="scurve" type="button"><span class="tab-icon">📈</span>S-Curve</button>
+            <button class="tab-btn" data-tab="project" type="button"><span class="tab-icon">⚙</span>Project</button>
+        </nav>
+    </div>
+
+    <!-- Activity editor sheet -->
+    <div class="sheet-backdrop" id="activity-sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <span class="sheet-title" id="activity-sheet-title">Add Activity</span>
+                <button class="btn btn-icon" id="btn-close-sheet" type="button">✕</button>
+            </div>
+            <div class="validation-banner hidden" id="activity-form-errors"></div>
+            <div class="sheet-body">
+                <div class="field">
+                    <span class="field-label">Name</span>
+                    <input class="field-input" id="field-name" type="text" placeholder="e.g. Foundation & Substructure">
+                </div>
+                <div class="field">
+                    <span class="field-label">Duration — Optimistic / Most Likely / Pessimistic (days)</span>
+                    <div class="field-row">
+                        <input class="field-input num" id="field-dO" type="number" min="0" step="0.5" inputmode="decimal">
+                        <input class="field-input num" id="field-dM" type="number" min="0" step="0.5" inputmode="decimal">
+                        <input class="field-input num" id="field-dP" type="number" min="0" step="0.5" inputmode="decimal">
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="field-label">Cost — Optimistic / Most Likely / Pessimistic</span>
+                    <div class="field-row">
+                        <input class="field-input num" id="field-cO" type="number" min="0" step="1" inputmode="decimal">
+                        <input class="field-input num" id="field-cM" type="number" min="0" step="1" inputmode="decimal">
+                        <input class="field-input num" id="field-cP" type="number" min="0" step="1" inputmode="decimal">
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="field-label">Depends on</span>
+                    <div class="chip-select" id="field-deps"></div>
+                    <div class="field-hint" id="field-deps-empty">No other activities yet — this will be the first.</div>
+                </div>
+                <button class="btn btn-primary btn-block" id="btn-save-activity" type="button">Save Activity</button>
+                <button class="btn btn-danger btn-block hidden" id="btn-delete-activity" type="button" style="margin-top:8px">Delete Activity</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/scheduler/js/engine.js"></script>
+    <script src="/static/scheduler/js/sample-data.js"></script>
+    <script src="/static/scheduler/js/app.js"></script>
+</body>
+</html>

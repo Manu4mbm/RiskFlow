@@ -1,0 +1,58 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RiskFlow — Privacy Policy</title>
+    <link rel="stylesheet" href="{% static 'scheduler/css/styles.css' %}">
+    <style>
+        body { display: block; }
+        .policy { max-width: 640px; margin: 0 auto; padding: 24px 20px 60px; }
+        .policy h1 { font-size: 20px; margin: 0 0 4px; color: var(--blue); }
+        .policy .updated { font-size: 12px; color: var(--ink-soft); margin-bottom: 24px; }
+        .policy h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin: 28px 0 8px; }
+        .policy p, .policy li { font-size: 14px; line-height: 1.6; color: var(--ink); }
+        .policy ul { padding-left: 20px; margin: 8px 0; }
+        .policy a { color: var(--blue); }
+    </style>
+</head>
+<body>
+    <div class="policy">
+        <h1>RiskFlow — Privacy Policy</h1>
+        <div class="updated">Last updated: 25 August 2026</div>
+
+        <p>RiskFlow is a schedule and cost risk analysis tool. This policy explains what
+        happens to your data — in short: it never leaves your device.</p>
+
+        <h2>What we collect</h2>
+        <p>Nothing, on any server we control. RiskFlow has no accounts, no sign-in, no
+        backend database, and no analytics or tracking of any kind. There is no server
+        that RiskFlow talks to after the app itself loads.</p>
+
+        <h2>Where your data lives</h2>
+        <p>Every activity, estimate, and simulation setting you enter is stored only in
+        your device's local app storage. It stays on your phone unless you explicitly
+        export it yourself (Project → Export) as a JSON file that you choose where to
+        save or share. Importing a file works the same way, entirely on-device.</p>
+
+        <h2>Third-party services</h2>
+        <p>The app loads one typeface ("IBM Plex Mono") from Google Fonts over the
+        network so numeric columns render correctly. That request is subject to
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's own privacy policy</a>.
+        No other third-party service is used, and RiskFlow does not send any of your
+        project data to Google or anyone else.</p>
+
+        <h2>Children's privacy</h2>
+        <p>RiskFlow is a professional project-scheduling tool, not directed at children,
+        and collects no personal information from anyone.</p>
+
+        <h2>Changes to this policy</h2>
+        <p>If this policy changes, the update will be posted on this page with a revised
+        date above.</p>
+
+        <h2>Contact</h2>
+        <p>Questions about this policy: <a href="mailto:mankdixit@gmail.com">mankdixit@gmail.com</a></p>
+    </div>
+</body>
+</html>

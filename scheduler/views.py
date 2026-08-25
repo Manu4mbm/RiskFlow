@@ -7,6 +7,10 @@ def index(request):
     return render(request, 'scheduler/index.html')
 
 
+def privacy(request):
+    return render(request, 'scheduler/privacy.html')
+
+
 def service_worker(request):
     """Served at /sw.js (not /static/...) so its default scope covers the whole app."""
     path = finders.find('scheduler/js/sw.js')
