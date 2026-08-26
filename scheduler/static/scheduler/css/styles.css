@@ -672,6 +672,34 @@ canvas { display: block; }
 .project-row-label { font-size: 14px; font-weight: 600; }
 .project-row-sub { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
 
+.project-picker-list { display: flex; flex-direction: column; border-top: 1px solid var(--hairline); }
+
+.project-picker-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 2px;
+    border-bottom: 1px solid var(--hairline);
+    cursor: pointer;
+}
+
+.project-picker-info { min-width: 0; }
+
+.project-picker-name {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.project-picker-name .active-mark { color: var(--teal); margin-right: 4px; }
+
+.project-picker-sub { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+
+.project-picker-row.is-active .project-picker-name { color: var(--blue); }
+
 .about-block {
     padding: 14px 16px;
     font-size: 13px;

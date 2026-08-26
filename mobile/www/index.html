@@ -175,6 +175,22 @@
             <div class="chart-empty" id="scurve-empty">Run a simulation to see the S-curve.</div>
         </section>
 
+        <!-- EXPORT -->
+        <section class="view" id="view-export" data-view="export">
+            <div class="section-toolbar"><span class="section-title">Export to Excel</span></div>
+            <div class="about-block">
+                <p>Builds one .xlsx workbook for the current project: the activity table, the deterministic and P50/P80/P90 schedule and cost figures, the risk-adjusted Gantt (as a chart image plus its underlying per-activity ES/EF data), and the S-curve (chart image plus the cumulative-probability data) — all native Excel sheets, ready to re-chart or pivot yourself.</p>
+                <p id="export-hint" class="field-hint">Run a simulation first to include the Gantt, S-curve, and risk figures — otherwise only the activity table is exported.</p>
+            </div>
+            <div class="run-section">
+                <button class="run-button" id="btn-export-excel" type="button">
+                    <span class="run-progress-fill" id="export-progress-fill"></span>
+                    <span class="run-button-label" id="export-button-label">Export to Excel (.xlsx)</span>
+                </button>
+                <div class="run-status hidden" id="export-status"></div>
+            </div>
+        </section>
+
         <!-- PROJECT -->
         <section class="view" id="view-project" data-view="project">
             <div class="section-toolbar"><span class="section-title">Project Data</span></div>
@@ -185,6 +201,13 @@
                         <div class="project-row-sub" id="project-name-sub">Untitled Project</div>
                     </div>
                     <button class="btn btn-sm" id="btn-rename-project" type="button">Rename</button>
+                </div>
+                <div class="project-row">
+                    <div>
+                        <div class="project-row-label">All projects</div>
+                        <div class="project-row-sub" id="project-count-sub">1 project</div>
+                    </div>
+                    <button class="btn btn-sm" id="btn-manage-projects" type="button">Switch / New</button>
                 </div>
                 <div class="project-row">
                     <div>
@@ -230,6 +253,7 @@
             <button class="tab-btn" data-tab="run" type="button"><span class="tab-icon">▶</span>Run</button>
             <button class="tab-btn" data-tab="gantt" type="button"><span class="tab-icon">📊</span>Gantt</button>
             <button class="tab-btn" data-tab="scurve" type="button"><span class="tab-icon">📈</span>S-Curve</button>
+            <button class="tab-btn" data-tab="export" type="button"><span class="tab-icon">⬇</span>Export</button>
             <button class="tab-btn" data-tab="project" type="button"><span class="tab-icon">⚙</span>Project</button>
         </nav>
     </div>
@@ -274,8 +298,23 @@
         </div>
     </div>
 
+    <!-- Project picker sheet -->
+    <div class="sheet-backdrop" id="project-sheet-backdrop">
+        <div class="sheet">
+            <div class="sheet-header">
+                <span class="sheet-title">Projects</span>
+                <button class="btn btn-icon" id="btn-close-project-sheet" type="button">✕</button>
+            </div>
+            <div class="sheet-body">
+                <button class="btn btn-primary btn-block" id="btn-new-project" type="button" style="margin-bottom:14px">+ New Project</button>
+                <div class="project-picker-list" id="project-picker-list"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
+    <script src="/static/scheduler/js/vendor/exceljs.min.js"></script>
     <script src="/static/scheduler/js/engine.js"></script>
     <script src="/static/scheduler/js/sample-data.js"></script>
     <script src="/static/scheduler/js/app.js"></script>

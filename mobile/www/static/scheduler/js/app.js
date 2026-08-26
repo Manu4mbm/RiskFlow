@@ -3,7 +3,9 @@
 
     // ---------- Constants ----------
 
-    var STORAGE_KEY = 'riskflow_project';
+    var LEGACY_STORAGE_KEY = 'riskflow_project'; // pre-multi-project single-project store; migrated on first load
+    var PROJECTS_KEY = 'riskflow_projects';
+    var ACTIVE_PROJECT_KEY = 'riskflow_active_project_id';
     var THEME_KEY = 'riskflow_theme';
     var LABEL_W = 96;
     var MIN_PX_PER_DAY = 12;
@@ -12,6 +14,7 @@
 
     function emptyProject() {
         return {
+            id: newId(),
             version: 1,
             name: 'Untitled Project',
             currency: 'INR',
@@ -113,11 +116,23 @@
         scurveEmpty: document.getElementById('scurve-empty'),
 
         btnRenameProject: document.getElementById('btn-rename-project'),
+        projectCountSub: document.getElementById('project-count-sub'),
+        btnManageProjects: document.getElementById('btn-manage-projects'),
         btnLoadSample: document.getElementById('btn-load-sample'),
         btnExport: document.getElementById('btn-export'),
         btnImport: document.getElementById('btn-import'),
         importFile: document.getElementById('import-file'),
         btnClear: document.getElementById('btn-clear'),
+
+        projectSheetBackdrop: document.getElementById('project-sheet-backdrop'),
+        btnCloseProjectSheet: document.getElementById('btn-close-project-sheet'),
+        btnNewProject: document.getElementById('btn-new-project'),
+        projectPickerList: document.getElementById('project-picker-list'),
+
+        btnExportExcel: document.getElementById('btn-export-excel'),
+        exportProgressFill: document.getElementById('export-progress-fill'),
+        exportButtonLabel: document.getElementById('export-button-label'),
+        exportStatus: document.getElementById('export-status'),
 
         sheetBackdrop: document.getElementById('activity-sheet-backdrop'),
         sheetTitle: document.getElementById('activity-sheet-title'),
@@ -141,29 +156,58 @@
     // ---------- State ----------
 
     var state = {
-        project: loadProject(),
+        projects: loadProjects(),
+        activeProjectId: null,
+        project: null,
         result: null,
         activeTab: 'activities',
         editingId: null,
         editingDeps: [],
         scurveMetric: 'schedule'
     };
+    setActiveProject(loadActiveProjectId(state.projects));
+    saveProject(); // commits a first-run migration from the legacy single-project store, if any
 
-    function loadProject() {
+    function loadProjects() {
         try {
-            var raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return emptyProject();
-            var parsed = JSON.parse(raw);
-            if (!parsed || !Array.isArray(parsed.tasks)) return emptyProject();
-            var base = emptyProject();
-            return Object.assign(base, parsed);
-        } catch (e) {
-            return emptyProject();
-        }
+            var raw = localStorage.getItem(PROJECTS_KEY);
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr) && arr.length) {
+                    return arr.map(function (p) { return Object.assign(emptyProject(), p); });
+                }
+            }
+        } catch (e) { /* fall through to migration / default below */ }
+
+        // Migrate the pre-multi-project single-project store, if present.
+        try {
+            var legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+            if (legacy) {
+                var parsed = JSON.parse(legacy);
+                if (parsed && Array.isArray(parsed.tasks)) {
+                    return [Object.assign(emptyProject(), parsed, { id: newId() })];
+                }
+            }
+        } catch (e) { /* fall through to default below */ }
+
+        return [emptyProject()];
+    }
+
+    function loadActiveProjectId(projects) {
+        var saved = localStorage.getItem(ACTIVE_PROJECT_KEY);
+        if (saved && projects.some(function (p) { return p.id === saved; })) return saved;
+        return projects[0].id;
+    }
+
+    function setActiveProject(id) {
+        state.activeProjectId = id;
+        state.project = state.projects.find(function (p) { return p.id === id; });
+        state.result = null;
     }
 
     function saveProject() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.project));
+        localStorage.setItem(PROJECTS_KEY, JSON.stringify(state.projects));
+        localStorage.setItem(ACTIVE_PROJECT_KEY, state.activeProjectId);
     }
 
     // ---------- Toast ----------
@@ -707,23 +751,16 @@
 
     // ---------- S-Curve ----------
 
-    function renderSCurve(_settled) {
+    // Shared by the live S-Curve view and the fixed-size offscreen snapshot used for
+    // Excel export -- `container` only ever needs .clientWidth/.clientHeight, so export
+    // passes a plain {clientWidth, clientHeight} object instead of a real DOM node.
+    function drawSCurveChart(canvas, container, metric) {
         var result = state.result;
-        var canvas = el.scurveCanvas;
-        var container = el.scurveScroll;
         var containerWidth = container.clientWidth;
         var containerHeight = container.clientHeight || 320;
 
-        if (!result || containerWidth === 0) {
-            el.scurveEmpty.classList.remove('hidden');
-            canvas.classList.add('hidden');
-            if (!_settled) settleThenRedraw(function () { renderSCurve(true); });
-            return;
-        }
-        el.scurveEmpty.classList.add('hidden');
-        canvas.classList.remove('hidden');
+        if (!result || containerWidth === 0) return false;
 
-        var metric = state.scurveMetric;
         var arr = metric === 'schedule' ? result.finish : result.cost;
         var currency = state.project.currency;
         var fmt = function (v) { return metric === 'schedule' ? formatDays(v) : formatCurrency(v, currency); };
@@ -830,6 +867,13 @@
             ctx.fillText('P' + m.p + ' ' + fmt(v), labelX, padT - 8 - mi * 13);
         });
 
+        return true;
+    }
+
+    function renderSCurve(_settled) {
+        var ok = drawSCurveChart(el.scurveCanvas, el.scurveScroll, state.scurveMetric);
+        el.scurveEmpty.classList.toggle('hidden', !!ok);
+        el.scurveCanvas.classList.toggle('hidden', !ok);
         if (!_settled) settleThenRedraw(function () { renderSCurve(true); });
     }
 
@@ -841,13 +885,352 @@
             return;
         }
         var sample = JSON.parse(JSON.stringify(window.SAMPLE_PROJECT));
-        sample.tasks.forEach(function (t) { t.id = t.id; }); // ids kept as-is; fresh project anyway
+        sample.id = state.project.id; // replace the current project's data in place, keep its slot/id
+        var idx = state.projects.findIndex(function (p) { return p.id === state.project.id; });
+        state.projects[idx] = sample;
         state.project = sample;
         state.result = null;
         saveProject();
         renderAll();
         showToast('Sample project loaded');
     }
+
+    // ---------- Multi-project switcher ----------
+
+    function createProject() {
+        var name = window.prompt('New project name', 'Untitled Project');
+        if (name === null) return;
+        name = name.trim() || 'Untitled Project';
+        var project = emptyProject();
+        project.name = name;
+        state.projects.push(project);
+        setActiveProject(project.id);
+        saveProject();
+        renderAll();
+        renderProjectSheetList();
+        closeProjectSheet();
+        showToast('Created "' + name + '"');
+    }
+
+    function switchProject(id) {
+        if (id !== state.activeProjectId) {
+            setActiveProject(id);
+            saveProject();
+            renderAll();
+            showToast('Switched to "' + state.project.name + '"');
+        }
+        closeProjectSheet();
+    }
+
+    function deleteProjectById(id) {
+        if (state.projects.length <= 1) {
+            window.alert("You can't delete your only project.");
+            return;
+        }
+        var project = state.projects.find(function (p) { return p.id === id; });
+        if (!project) return;
+        if (!window.confirm('Delete "' + (project.name || 'Untitled Project') + '"? This cannot be undone.')) return;
+
+        state.projects = state.projects.filter(function (p) { return p.id !== id; });
+        if (state.activeProjectId === id) setActiveProject(state.projects[0].id);
+        saveProject();
+        renderAll();
+        renderProjectSheetList();
+        showToast('Project deleted');
+    }
+
+    function renderProjectSheetList() {
+        el.projectPickerList.innerHTML = '';
+        state.projects.forEach(function (p) {
+            var isActive = p.id === state.activeProjectId;
+            var row = document.createElement('div');
+            row.className = 'project-picker-row' + (isActive ? ' is-active' : '');
+
+            var info = document.createElement('div');
+            info.className = 'project-picker-info';
+            var name = document.createElement('div');
+            name.className = 'project-picker-name';
+            if (isActive) {
+                var mark = document.createElement('span');
+                mark.className = 'active-mark';
+                mark.textContent = '✓';
+                name.appendChild(mark);
+            }
+            name.appendChild(document.createTextNode(p.name || 'Untitled Project'));
+            var sub = document.createElement('div');
+            sub.className = 'project-picker-sub';
+            sub.textContent = p.tasks.length + (p.tasks.length === 1 ? ' activity' : ' activities');
+            info.appendChild(name);
+            info.appendChild(sub);
+
+            var del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'btn btn-icon btn-danger';
+            del.textContent = '🗑';
+            del.addEventListener('click', function (e) {
+                e.stopPropagation();
+                deleteProjectById(p.id);
+            });
+
+            row.appendChild(info);
+            row.appendChild(del);
+            row.addEventListener('click', function () { switchProject(p.id); });
+            el.projectPickerList.appendChild(row);
+        });
+    }
+
+    function openProjectSheet() {
+        renderProjectSheetList();
+        el.projectSheetBackdrop.classList.add('open');
+    }
+
+    function closeProjectSheet() {
+        el.projectSheetBackdrop.classList.remove('open');
+    }
+
+    // ---------- Excel export ----------
+
+    function round1(v) { return Math.round(v * 10) / 10; }
+
+    // Renders into a detached, fixed-size canvas rather than the live view --
+    // drawGanttChart/drawSCurveChart only ever read .clientWidth/.clientHeight off
+    // whatever "container" they're given, so a plain object stands in for a real one.
+    // This lets export produce a good chart image regardless of which tab is open,
+    // without flashing the UI over to Gantt/S-Curve to size off the visible canvas.
+    function captureGanttImage(width, height) {
+        var canvas = document.createElement('canvas');
+        var ok = drawGanttChart(canvas, { clientWidth: width, clientHeight: height });
+        return ok ? canvas.toDataURL('image/png') : null;
+    }
+
+    function captureSCurveImage(metric, width, height) {
+        var canvas = document.createElement('canvas');
+        var ok = drawSCurveChart(canvas, { clientWidth: width, clientHeight: height }, metric);
+        return ok ? canvas.toDataURL('image/png') : null;
+    }
+
+    function addActivitiesSheet(workbook, project, result) {
+        var sheet = workbook.addWorksheet('Activities');
+        var idLabel = {};
+        project.tasks.forEach(function (t, i) { idLabel[t.id] = 'A' + (i + 1); });
+        var criticalSet = result ? result.criticalSet : computeStaticCriticalSet(project.tasks);
+
+        sheet.columns = [
+            { header: 'ID', key: 'id', width: 6 },
+            { header: 'Activity', key: 'name', width: 34 },
+            { header: 'Depends On', key: 'deps', width: 16 },
+            { header: 'Duration O', key: 'dO', width: 12 },
+            { header: 'Duration M', key: 'dM', width: 12 },
+            { header: 'Duration P', key: 'dP', width: 12 },
+            { header: 'Cost O', key: 'cO', width: 14 },
+            { header: 'Cost M', key: 'cM', width: 14 },
+            { header: 'Cost P', key: 'cP', width: 14 },
+            { header: 'Critical Path', key: 'critical', width: 13 }
+        ];
+        sheet.getRow(1).font = { bold: true };
+        sheet.getRow(1).eachCell(function (cell) { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE4EDF3' } }; });
+
+        project.tasks.forEach(function (t) {
+            var row = sheet.addRow({
+                id: idLabel[t.id],
+                name: t.name,
+                deps: (t.deps || []).map(function (d) { return idLabel[d] || '?'; }).join(', '),
+                dO: t.dO, dM: t.dM, dP: t.dP,
+                cO: t.cO, cM: t.cM, cP: t.cP,
+                critical: criticalSet[t.id] ? 'Yes' : 'No'
+            });
+            if (criticalSet[t.id]) row.getCell('critical').font = { bold: true, color: { argb: 'FFE07B2C' } };
+        });
+
+        ['dO', 'dM', 'dP'].forEach(function (key) { sheet.getColumn(key).numFmt = '0.0'; });
+        ['cO', 'cM', 'cP'].forEach(function (key) { sheet.getColumn(key).numFmt = '#,##0'; });
+    }
+
+    function addSummarySheet(workbook, project, result) {
+        var sheet = workbook.addWorksheet('Summary');
+        sheet.getColumn(1).width = 30;
+        sheet.getColumn(2).width = 16;
+        sheet.getColumn(3).width = 16;
+        sheet.getColumn(4).width = 16;
+        sheet.getColumn(5).width = 16;
+
+        sheet.addRow(['Project', project.name]);
+        sheet.addRow(['Currency', project.currency]);
+        sheet.addRow(['Activities', project.tasks.length]);
+        sheet.addRow(['Generated', new Date().toLocaleString()]);
+
+        if (!result) {
+            sheet.addRow([]);
+            sheet.addRow(['Run a simulation in the app to include schedule/cost risk figures.']);
+            return;
+        }
+
+        sheet.addRow(['Iterations', project.iterations]);
+        sheet.addRow(['Distribution', project.distribution === 'triangular' ? 'Triangular' : 'PERT-Beta']);
+        sheet.addRow([]);
+
+        var schedP50 = RiskEngine.percentile(result.finish, 50);
+        var schedP80 = RiskEngine.percentile(result.finish, 80);
+        var schedP90 = RiskEngine.percentile(result.finish, 90);
+        var costP50 = RiskEngine.percentile(result.cost, 50);
+        var costP80 = RiskEngine.percentile(result.cost, 80);
+        var costP90 = RiskEngine.percentile(result.cost, 90);
+
+        var schedHeader = sheet.addRow(['Schedule (days)', 'Deterministic', 'P50', 'P80', 'P90']);
+        schedHeader.font = { bold: true };
+        sheet.addRow(['Project finish', round1(result.baseFinish), round1(schedP50), round1(schedP80), round1(schedP90)]);
+        sheet.addRow(['Contingency vs deterministic (P80)', null, null, round1(schedP80 - result.baseFinish), null]);
+        sheet.addRow([]);
+
+        var costHeader = sheet.addRow(['Cost', 'Deterministic', 'P50', 'P80', 'P90']);
+        costHeader.font = { bold: true };
+        sheet.addRow(['Total cost', Math.round(result.baseCost), Math.round(costP50), Math.round(costP80), Math.round(costP90)]);
+        sheet.addRow(['Contingency vs deterministic (P80)', null, null, Math.round(costP80 - result.baseCost), null]);
+    }
+
+    function addGanttSheet(workbook, project, result) {
+        var sheet = workbook.addWorksheet('Gantt');
+        var idLabel = {};
+        project.tasks.forEach(function (t, i) { idLabel[t.id] = 'A' + (i + 1); });
+        var byId = {};
+        project.tasks.forEach(function (t) { byId[t.id] = t; });
+
+        var captureW = 1400, captureH = Math.max(360, 40 + result.order.length * 30);
+        var image = captureGanttImage(captureW, captureH);
+        var tableStartRow = 1;
+        if (image) {
+            var imageId = workbook.addImage({ base64: image, extension: 'png' });
+            var displayW = 700, displayH = captureH * (displayW / captureW);
+            sheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: displayW, height: displayH } });
+            tableStartRow = Math.ceil(displayH / 20) + 2;
+        }
+
+        sheet.getRow(tableStartRow).values = ['ID', 'Activity', 'Critical', 'ES (P50)', 'EF (P50)', 'ES (P80)', 'EF (P80)', 'ES (P90)', 'EF (P90)'];
+        sheet.getRow(tableStartRow).font = { bold: true };
+        [10, 30, 10, 12, 12, 12, 12, 12, 12].forEach(function (w, i) { sheet.getColumn(i + 1).width = w; });
+
+        result.order.forEach(function (id, i) {
+            var rowValues = [idLabel[id], byId[id].name, result.criticalSet[id] ? 'Yes' : 'No'];
+            [50, 80, 90].forEach(function (p) {
+                rowValues.push(round1(RiskEngine.percentile(result.taskES[id], p)));
+                rowValues.push(round1(RiskEngine.percentile(result.taskEF[id], p)));
+            });
+            sheet.getRow(tableStartRow + 1 + i).values = rowValues;
+        });
+    }
+
+    function addSCurveSheet(workbook, project, result) {
+        var sheet = workbook.addWorksheet('S-Curve');
+        var currency = project.currency;
+
+        var schedImage = captureSCurveImage('schedule', 900, 420);
+        var costImage = captureSCurveImage('cost', 900, 420);
+        var row = 1;
+        if (schedImage) {
+            var schedImageId = workbook.addImage({ base64: schedImage, extension: 'png' });
+            sheet.addImage(schedImageId, { tl: { col: 0, row: 0 }, ext: { width: 620, height: 290 } });
+        }
+        if (costImage) {
+            var costImageId = workbook.addImage({ base64: costImage, extension: 'png' });
+            sheet.addImage(costImageId, { tl: { col: 8, row: 0 }, ext: { width: 620, height: 290 } });
+        }
+        row = 18;
+
+        [1, 9].forEach(function (col) { sheet.getColumn(col).width = 16; sheet.getColumn(col + 1).width = 14; });
+
+        var scheduleHeaderRow = sheet.getRow(row);
+        scheduleHeaderRow.getCell(1).value = 'Cumulative % — Schedule (days)';
+        scheduleHeaderRow.getCell(1).font = { bold: true };
+        var costHeaderRow = sheet.getRow(row);
+        costHeaderRow.getCell(9).value = 'Cumulative % — Cost';
+        costHeaderRow.getCell(9).font = { bold: true };
+
+        var headRow = sheet.getRow(row + 1);
+        headRow.getCell(1).value = 'Days';
+        headRow.getCell(2).value = 'Cumulative %';
+        headRow.getCell(9).value = 'Cost';
+        headRow.getCell(10).value = 'Cumulative %';
+        headRow.font = { bold: true };
+
+        var THIN = 60;
+        var finishSorted = result.finish, costSorted = result.cost;
+        for (var k = 0; k <= THIN; k++) {
+            var fi = Math.min(finishSorted.length - 1, Math.round((k / THIN) * (finishSorted.length - 1)));
+            var ci = Math.min(costSorted.length - 1, Math.round((k / THIN) * (costSorted.length - 1)));
+            var r = sheet.getRow(row + 2 + k);
+            r.getCell(1).value = round1(finishSorted[fi]);
+            r.getCell(2).value = round1((k / THIN) * 100);
+            r.getCell(9).value = Math.round(costSorted[ci]);
+            r.getCell(10).value = round1((k / THIN) * 100);
+        }
+    }
+
+    function excelExportFailed(err) {
+        el.exportProgressFill.style.width = '0%';
+        el.exportButtonLabel.textContent = 'Export to Excel (.xlsx)';
+        el.btnExportExcel.disabled = false;
+        el.exportStatus.classList.remove('hidden');
+        el.exportStatus.style.color = 'var(--danger)';
+        el.exportStatus.textContent = 'Export failed: ' + ((err && err.message) || String(err));
+    }
+
+    function exportExcel() {
+        if (!state.project.tasks.length) {
+            el.exportStatus.classList.remove('hidden');
+            el.exportStatus.style.color = 'var(--danger)';
+            el.exportStatus.textContent = 'Add at least one activity first.';
+            return;
+        }
+
+        el.btnExportExcel.disabled = true;
+        el.exportButtonLabel.textContent = 'Building…';
+        el.exportProgressFill.style.width = '35%';
+        el.exportStatus.classList.add('hidden');
+
+        // Yield one tick so the disabled/progress state actually paints before the
+        // (synchronous) workbook build + canvas rendering work runs.
+        setTimeout(function () {
+            try {
+                var project = state.project;
+                var result = state.result;
+
+                var workbook = new window.ExcelJS.Workbook();
+                workbook.creator = 'RiskFlow';
+                workbook.created = new Date();
+
+                addActivitiesSheet(workbook, project, result);
+                addSummarySheet(workbook, project, result);
+                if (result) {
+                    addGanttSheet(workbook, project, result);
+                    addSCurveSheet(workbook, project, result);
+                }
+
+                el.exportProgressFill.style.width = '75%';
+
+                workbook.xlsx.writeBuffer().then(function (buffer) {
+                    var blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    var url = URL.createObjectURL(blob);
+                    var filename = (project.name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'project';
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename + '.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+
+                    el.exportProgressFill.style.width = '0%';
+                    el.exportButtonLabel.textContent = 'Export to Excel (.xlsx)';
+                    el.btnExportExcel.disabled = false;
+                    showToast('Exported ' + filename + '.xlsx');
+                }).catch(excelExportFailed);
+            } catch (err) {
+                excelExportFailed(err);
+            }
+        }, 30);
+    }
+
+    el.btnExportExcel.addEventListener('click', exportExcel);
 
     function renameProject() {
         var name = window.prompt('Project name', state.project.name || 'Untitled Project');
@@ -920,11 +1303,20 @@
     });
     el.btnClear.addEventListener('click', clearProject);
 
+    el.btnManageProjects.addEventListener('click', openProjectSheet);
+    el.btnNewProject.addEventListener('click', createProject);
+    el.btnCloseProjectSheet.addEventListener('click', closeProjectSheet);
+    el.projectSheetBackdrop.addEventListener('click', function (e) {
+        if (e.target === el.projectSheetBackdrop) closeProjectSheet();
+    });
+
     // ---------- Header / full render ----------
 
     function renderHeader() {
         el.projectNameLabel.textContent = state.project.name || 'Untitled Project';
         el.projectNameSub.textContent = state.project.name || 'Untitled Project';
+        var n = state.projects.length;
+        el.projectCountSub.textContent = n + (n === 1 ? ' project' : ' projects');
     }
 
     function renderRunControls() {

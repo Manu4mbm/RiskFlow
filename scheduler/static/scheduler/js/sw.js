@@ -1,11 +1,12 @@
 'use strict';
 
-var CACHE_NAME = 'riskflow-shell-v1';
-var RUNTIME_CACHE = 'riskflow-runtime-v1';
+var CACHE_NAME = 'riskflow-shell-v2';
+var RUNTIME_CACHE = 'riskflow-runtime-v2';
 
 var APP_SHELL = [
     '/',
     '/static/scheduler/css/styles.css',
+    '/static/scheduler/js/vendor/exceljs.min.js',
     '/static/scheduler/js/engine.js',
     '/static/scheduler/js/sample-data.js',
     '/static/scheduler/js/app.js',
